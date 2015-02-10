@@ -1,0 +1,117 @@
+Official Documentation can be found here:
+https://wiki.jenkins-ci.org/display/JENKINS/Maven+Repository+Client
+
+###############################################################################
+### INTRODUCTION                                                            ###
+###############################################################################
+
+The Maven Repository Client Plugin provides a way to select a version from a
+Maven repository in order to further operate on the build artifacts, associated
+with that version. For example for uploading ZIP archives to a remote server or
+deploying them to an application server.
+
+The idea behind this is that you continuously deploy all your build artifacts
+to a Maven repository. But you deploy only selected ones to a remote site, a
+customer FTP server for example.
+
+###############################################################################
+### PREREQUISITES                                                           ###
+###############################################################################
+
+The current implementation has been tested with Nexus, Artifactory and
+Subversion as "poor man's" repository.
+Nexus returns a XML folder structure when you specify a mime-type 
+application/xml.
+Artifactory returns a simple HTML page when using the "list" URL:
+http://server/artifactory/list/reponame. The href="" attributes are parsed from
+the HTML file and filtered against a list of standard exclude patterns, 
+like ".." or "http://subversion.tigris.org" for example.
+
+### Mask Password ###
+
+NOTE: You should make sure to mask the password, specified for a repository so
+that the password does not appear plan-text in the console log:
+https://wiki.jenkins-ci.org/display/JENKINS/Mask+Passwords+Plugin
+
+### Proxy ###
+
+In case a proxy is required to access a repository then the proxy must be
+configured via the Java parameters and passed as environment properties
+to the build job.
+See the following Wiki for details:
+http://wiki.eclipse.org/Hudson#Accessing_the_Internet_using_Proxy
+
+For example: Invoke Ant -> Java Options
+-Dhttp.proxyHost=proxy.mycompany.com -Dhttp.proxyPort=80 
+-Dhttps.proxyHost=proxy.mycompany.com -Dhttps.proxyPort=80 
+-DhttpnonProxyHosts=*.mycompany.com -DhttpsnonProxyHosts=*.mycompany.com
+
+###############################################################################
+### USER INTERFACE                                                          ###
+###############################################################################
+
+### Global Configuration ###
+
+Define multiple Maven repositories that can be accessed by the Jenkins instance:
+1. Name: Main
+2. Server Base URL: https://www.mycompany.com/maven/
+3. Username: user  (e.g. a global read-only user)
+4. Password: password
+
+### Job Configuration ###
+
+1. Check the "parameterized Build" checkbox
+2. Create a parameter (create multiple parameters for multiple artifacts)
+  Maven Repository Artifact
+3. Select Maven repository, as defined in the Global Configuration:
+  Main
+4. Enter a groupId
+  Example: com.company.product
+5. Enter a artifactId
+  Example: artifact
+6. Enter a regular expression pattern which files to transfer
+  Example: .*\.zip$
+
+### Build Now ###
+
+1. Show a list with all versions from the specified groupId.artifactId folder
+  * version1
+  * version2
+  * ...
+  * versionN
+2. The user selects one entry for which the files are passed to the
+   build as parameters
+
+### Schedule Build ###
+
+1. The ant/gradle script iterates over a list of properties, downloads the
+   artifacts them from the Maven repository and performs arbitrary actions on 
+   the downloaded artifacts.
+
+###############################################################################
+### PROPERTIES                                                              ###
+###############################################################################
+
+The following properties are passed to the build script via the environment:
+* repoclient_reponame_<GROUPID>.<ARTIFACTID> - the name of the repository, as 
+     defined in the Jenkins global configuration
+* repoclient_artifactid_<GROUPID>.<ARTIFACTID> - the artifact id 
+* repoclient_groupid_<GROUPID>.<ARTIFACTID> -  the group id
+* repoclient_pattern_<GROUPID>.<ARTIFACTID> - the regex pattern used to select 
+     the files
+* repoclient_version_<GROUPID>.<ARTIFACTID> - the version number 
+* repoclient_urls_<GROUPID>.<ARTIFACTID> - the URLs of the selected files
+* repoclient_user_<GROUPID>.<ARTIFACTID> - the name of the repository user
+* repoclient_password_<GROUPID>.<ARTIFACTID> - the password of the repository
+     user
+
+###############################################################################
+### IMPLEMENTATION                                                          ###
+###############################################################################
+
+The HTTP/HTTPS request functionality has been implemented with Apache HTTPClient
+only. A Nexus repository returns a XML structure when the mime-type
+"application/xml" is used. The result is parsed with JAXB, which means that
+Java 6 is the minimum requirement. For all other Maven repositories, like
+Artifactory or a simple HTML folder view, a regex parsing algorithm
+is used to extract the HTTP URLs from the HTML code: href=[\n\r ]*\"([^\"]*)\"
